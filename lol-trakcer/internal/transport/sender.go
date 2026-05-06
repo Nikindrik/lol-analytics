@@ -11,13 +11,13 @@ import (
 
 type DataSender struct {
 	url string
-	c *http.Client
+	c   *http.Client
 }
 
 func NewDataSender(url string) *DataSender {
 	return &DataSender{
 		url: url,
-		c: &http.Client{Timeout: 5*time.Second},
+		c:   &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -25,12 +25,12 @@ func (d *DataSender) SendToBackend(p *models.PlayerAnalytics, e []models.EventAn
 
 	body := models.ServerPayload{
 		Timestamp: time.Now().Unix(),
-		Player: *p,
-		Events: e,
+		Player:    *p,
+		Events:    e,
 	}
 
-	b,_ := json.Marshal(body)
+	b, _ := json.Marshal(body)
 
-	_, err := d.c.Post(d.url,"application/json",bytes.NewBuffer(b))
+	_, err := d.c.Post(d.url, "application/json", bytes.NewBuffer(b))
 	return err
 }
