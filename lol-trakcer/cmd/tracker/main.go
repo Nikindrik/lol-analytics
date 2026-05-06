@@ -31,7 +31,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
 	defer stop()
 
 	ticker := time.NewTicker(dur)
@@ -39,23 +43,42 @@ func main() {
 
 	for {
 		select {
+
 		case <-ctx.Done():
+			fmt.Println("\nStopping tracker...")
 			return
+
 		case <-ticker.C:
+
+			// Проверяем запущена ли игра
 			if !client.IsAvailable() {
+				fmt.Print("\rWaiting for game...")
 				continue
 			}
 
+			// Получаем live game data
 			game, err := client.GetGameData()
 			if err != nil {
-				log.Println(err)
+				log.Println("get game data:", err)
 				continue
 			}
 
-			player, events := tracker.GetPlayerAnalytics(game)
+			// Аналитика игрока + оппонента + events
+			player, opponent, events := tracker.GetPlayerAnalytics(game)
+
+			// Локальный вывод
 			formatter.PrintStatus(player)
 
-			_ = sender.SendToBackend(player, events)
+			// Отправка на backend/mock-server
+			err = sender.SendToBackend(
+				player,
+				opponent,
+				events,
+			)
+
+			if err != nil {
+				log.Println("send error:", err)
+			}
 		}
 	}
 }

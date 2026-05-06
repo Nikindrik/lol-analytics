@@ -17,20 +17,32 @@ type DataSender struct {
 func NewDataSender(url string) *DataSender {
 	return &DataSender{
 		url: url,
-		c:   &http.Client{Timeout: 5 * time.Second},
+		c: &http.Client{
+			Timeout: 5 * time.Second,
+		},
 	}
 }
 
-func (d *DataSender) SendToBackend(p *models.PlayerAnalytics, e []models.EventAnalytics) error {
+func (d *DataSender) SendToBackend(
+	player *models.PlayerAnalytics,
+	opponent *models.PlayerAnalytics,
+	events []models.EventAnalytics,
+) error {
 
 	body := models.ServerPayload{
 		Timestamp: time.Now().Unix(),
-		Player:    *p,
-		Events:    e,
+		Player:    *player,
+		Opponent:  *opponent,
+		Events:    events,
 	}
 
 	b, _ := json.Marshal(body)
 
-	_, err := d.c.Post(d.url, "application/json", bytes.NewBuffer(b))
+	_, err := d.c.Post(
+		d.url,
+		"application/json",
+		bytes.NewBuffer(b),
+	)
+
 	return err
 }

@@ -6,20 +6,13 @@ type GameTracker struct{}
 
 func NewGameTracker() *GameTracker { return &GameTracker{} }
 
-func (g *GameTracker) GetPlayerAnalytics(data *models.GameDataResponse) (*models.PlayerAnalytics, []models.EventAnalytics) {
-
-	var p *models.Player
-
-	for i := range data.AllPlayers {
-		if data.AllPlayers[i].SummonerName == data.ActivePlayer.SummonerName {
-			p = &data.AllPlayers[i]
-			break
-		}
-	}
-
-	if p == nil {
-		return &models.PlayerAnalytics{}, nil
-	}
+func buildPlayerAnalytics(
+	data *models.GameDataResponse,
+	p *models.Player,
+	teamKills int,
+	teamGold float64,
+	enemyKills int,
+) models.PlayerAnalytics {
 
 	items := []models.ItemAnalytics{}
 	totalItemGold := 0.0
@@ -37,35 +30,13 @@ func (g *GameTracker) GetPlayerAnalytics(data *models.GameDataResponse) (*models
 
 	jungleCS := int(float64(p.Scores.CreepScore) * 0.3)
 
-	teamKills := 0
-	teamGold := 0.0
-
-	for _, pl := range data.AllPlayers {
-		if pl.Team == p.Team {
-			teamKills += pl.Scores.Kills
-
-			for _, it := range pl.Items {
-				teamGold += it.Price
-			}
-		}
-	}
-
-	events := []models.EventAnalytics{}
-	for _, e := range data.Events.Events {
-		events = append(events, models.EventAnalytics{
-			Type:   e.EventName,
-			Time:   e.EventTime,
-			Killer: e.KillerName,
-			Victim: e.VictimName,
-		})
-	}
-
-	return &models.PlayerAnalytics{
+	return models.PlayerAnalytics{
 		SummonerName: p.SummonerName,
 		Champion:     p.ChampionName,
 
 		RiotID: p.RiotID,
 		Role:   p.Position,
+		Team:   p.Team,
 
 		CurrentGold:   data.ActivePlayer.CurrentGold,
 		TotalItemGold: totalItemGold,
@@ -74,6 +45,8 @@ func (g *GameTracker) GetPlayerAnalytics(data *models.GameDataResponse) (*models
 		Kills:   p.Scores.Kills,
 		Deaths:  p.Scores.Deaths,
 		Assists: p.Scores.Assists,
+
+		EnemyKills: enemyKills,
 
 		CS:        p.Scores.CreepScore,
 		JungleCS:  jungleCS,
@@ -96,5 +69,90 @@ func (g *GameTracker) GetPlayerAnalytics(data *models.GameDataResponse) (*models
 
 		Items:    items,
 		GameTime: data.GameData.GameTime,
-	}, events
+	}
+}
+
+func (g *GameTracker) GetPlayerAnalytics(
+	data *models.GameDataResponse,
+) (*models.PlayerAnalytics, *models.PlayerAnalytics, []models.EventAnalytics) {
+
+	var player *models.Player
+
+	for i := range data.AllPlayers {
+		if data.AllPlayers[i].SummonerName == data.ActivePlayer.SummonerName {
+			player = &data.AllPlayers[i]
+			break
+		}
+	}
+
+	if player == nil {
+		return &models.PlayerAnalytics{}, &models.PlayerAnalytics{}, nil
+	}
+
+	var opponent *models.Player
+
+	for i := range data.AllPlayers {
+
+		p := &data.AllPlayers[i]
+
+		if p.Team != player.Team &&
+			p.Position == player.Position {
+			opponent = p
+			break
+		}
+	}
+
+	teamKills := 0
+	teamGold := 0.0
+
+	enemyKills := 0
+
+	for _, p := range data.AllPlayers {
+
+		if p.Team == player.Team {
+
+			teamKills += p.Scores.Kills
+
+			for _, it := range p.Items {
+				teamGold += it.Price
+			}
+
+		} else {
+			enemyKills += p.Scores.Kills
+		}
+	}
+
+	events := []models.EventAnalytics{}
+
+	for _, e := range data.Events.Events {
+		events = append(events, models.EventAnalytics{
+			Type:   e.EventName,
+			Time:   e.EventTime,
+			Killer: e.KillerName,
+			Victim: e.VictimName,
+		})
+	}
+
+	me := buildPlayerAnalytics(
+		data,
+		player,
+		teamKills,
+		teamGold,
+		enemyKills,
+	)
+
+	var enemy models.PlayerAnalytics
+
+	if opponent != nil {
+
+		enemy = buildPlayerAnalytics(
+			data,
+			opponent,
+			enemyKills,
+			teamGold,
+			teamKills,
+		)
+	}
+
+	return &me, &enemy, events
 }

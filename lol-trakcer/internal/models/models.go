@@ -80,6 +80,7 @@ type PlayerAnalytics struct {
 
 	RiotID string
 	Role   string
+	Team   string
 
 	CurrentGold   float64
 	TotalItemGold float64
@@ -108,6 +109,8 @@ type PlayerAnalytics struct {
 	TeamKills int
 	TeamGold  float64
 
+	EnemyKills int
+
 	Items    []ItemAnalytics
 	GameTime float64
 }
@@ -134,8 +137,8 @@ type TeamAnalytics struct {
 type ServerPayload struct {
 	Timestamp int64
 
-	Player PlayerAnalytics
-	Team   TeamAnalytics
+	Player   PlayerAnalytics
+	Opponent PlayerAnalytics
 
 	Events []EventAnalytics
 }
