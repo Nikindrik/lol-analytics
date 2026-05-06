@@ -1,0 +1,158 @@
+openapi: 3.0.3
+info:
+  title: LoL Tracker API
+  version: 1.0.0
+  description: Local analytics ingestion API for League of Legends tracker
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /v1/update:
+    post:
+      summary: Send player analytics payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerPayload'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+
+    get:
+      summary: Get last received payload (debug)
+      responses:
+        "200":
+          description: Last payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerPayload'
+
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  schemas:
+
+    ServerPayload:
+      type: object
+      required: [timestamp, player]
+      properties:
+        timestamp:
+          type: integer
+          format: int64
+
+        game_time:
+          type: number
+          format: float
+
+        player:
+          $ref: '#/components/schemas/PlayerAnalytics'
+
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventAnalytics'
+
+    PlayerAnalytics:
+      type: object
+      required:
+        - summoner_name
+        - champion
+      properties:
+        summoner_name:
+          type: string
+
+        champion:
+          type: string
+
+        current_gold:
+          type: number
+
+        total_item_gold:
+          type: number
+
+        kills:
+          type: integer
+
+        deaths:
+          type: integer
+
+        assists:
+          type: integer
+
+        cs:
+          type: integer
+
+        ward_score:
+          type: number
+
+        level:
+          type: integer
+
+        abilities:
+          $ref: '#/components/schemas/AbilitiesAnalytics'
+
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemAnalytics'
+
+    AbilitiesAnalytics:
+      type: object
+      properties:
+        q:
+          type: integer
+        w:
+          type: integer
+        e:
+          type: integer
+        r:
+          type: integer
+
+    ItemAnalytics:
+      type: object
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+        slot:
+          type: integer
+
+    EventAnalytics:
+      type: object
+      properties:
+        type:
+          type: string
+        time:
+          type: number
+        killer:
+          type: string
+        victim:
+          type: string
+
+    UpdateResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        receivedAt:
+          type: string
+          format: date-time
