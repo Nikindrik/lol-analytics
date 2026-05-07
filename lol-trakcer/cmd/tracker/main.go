@@ -50,23 +50,22 @@ func main() {
 
 		case <-ticker.C:
 
-			// Проверяем запущена ли игра
 			if !client.IsAvailable() {
 				fmt.Print("\rWaiting for game...")
 				continue
 			}
 
-			// Получаем live game data
+			// Получение live game data
 			game, err := client.GetGameData()
 			if err != nil {
 				log.Println("get game data:", err)
 				continue
 			}
 
-			// Аналитика игрока + оппонента + events
+			// Аналитика игрока + вражина + events
 			player, opponent, events := tracker.GetPlayerAnalytics(game)
 
-			// Локальный вывод
+			// Дебаг костко
 			formatter.PrintStatus(player)
 
 			// Отправка на backend/mock-server

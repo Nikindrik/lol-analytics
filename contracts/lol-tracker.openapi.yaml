@@ -1,67 +1,85 @@
 openapi: 3.0.3
+
 info:
   title: LoL Tracker API
   version: 1.0.0
-  description: Local analytics ingestion API for League of Legends tracker
+  description: |
+    API schema for League of Legends live game analytics tracker.
 
 servers:
   - url: http://localhost:8080
 
 paths:
-  /v1/update:
+  /ingest:
     post:
-      summary: Send player analytics payload
+      summary: Receive live game analytics payload
+      operationId: ingestGameAnalytics
+
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ServerPayload'
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UpdateResponse'
 
-    get:
-      summary: Get last received payload (debug)
       responses:
-        "200":
-          description: Last payload
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ServerPayload'
+        '200':
+          description: Payload accepted
 
-  /health:
-    get:
-      summary: Health check
-      responses:
-        "200":
-          description: OK
-          content:
-            text/plain:
-              schema:
-                type: string
+        '400':
+          description: Invalid JSON payload
+
+        '401':
+          description: Unauthorized
+
+        '403':
+          description: Forbidden
+
+        '404':
+          description: Endpoint not found
+
+        '409':
+          description: Duplicate match payload
+
+        '413':
+          description: Payload too large
+
+        '415':
+          description: Unsupported media type
+
+        '422':
+          description: Validation failed
+
+        '429':
+          description: Too many requests
+
+        '500':
+          description: Internal server error
+
+        '502':
+          description: Bad gateway
+
+        '503':
+          description: Service unavailable
+
+        '504':
+          description: Gateway timeout
 
 components:
+
   schemas:
 
     ServerPayload:
       type: object
-      required: [timestamp, player]
       properties:
         timestamp:
           type: integer
           format: int64
 
-        game_time:
-          type: number
-          format: float
-
         player:
+          $ref: '#/components/schemas/PlayerAnalytics'
+
+        opponent:
           $ref: '#/components/schemas/PlayerAnalytics'
 
         events:
@@ -69,23 +87,49 @@ components:
           items:
             $ref: '#/components/schemas/EventAnalytics'
 
+      required:
+        - timestamp
+        - player
+        - opponent
+        - events
+
     PlayerAnalytics:
       type: object
-      required:
-        - summoner_name
-        - champion
+
       properties:
-        summoner_name:
+
+        summonerName:
           type: string
 
         champion:
           type: string
 
-        current_gold:
-          type: number
+        riotID:
+          type: string
 
-        total_item_gold:
+        role:
+          type: string
+
+        team:
+          type: string
+
+        isDead:
+          type: boolean
+
+        isBot:
+          type: boolean
+
+        currentGold:
           type: number
+          format: double
+
+        totalItemGold:
+          type: number
+          format: double
+
+        totalGold:
+          type: number
+          format: double
 
         kills:
           type: integer
@@ -96,63 +140,204 @@ components:
         assists:
           type: integer
 
+        enemyKills:
+          type: integer
+
         cs:
           type: integer
 
-        ward_score:
+        jungleCS:
+          type: integer
+
+        wardScore:
           type: number
+          format: double
 
         level:
           type: integer
 
-        abilities:
-          $ref: '#/components/schemas/AbilitiesAnalytics'
+        xpDiff:
+          type: integer
+
+        q:
+          type: integer
+
+        w:
+          type: integer
+
+        e:
+          type: integer
+
+        r:
+          type: integer
+
+        attackDamage:
+          type: number
+          format: double
+
+        armor:
+          type: number
+          format: double
+
+        magicResist:
+          type: number
+          format: double
+
+        maxHealth:
+          type: number
+          format: double
+
+        teamKills:
+          type: integer
+
+        teamGold:
+          type: number
+          format: double
+
+        teamLevel:
+          type: integer
+
+        teamXPDiff:
+          type: integer
+
+        runes:
+          $ref: '#/components/schemas/RuneAnalytics'
+
+        objectives:
+          $ref: '#/components/schemas/ObjectivesAnalytics'
 
         items:
           type: array
           items:
             $ref: '#/components/schemas/ItemAnalytics'
 
-    AbilitiesAnalytics:
+        gameTime:
+          type: number
+          format: double
+
+      required:
+        - summonerName
+        - champion
+        - riotID
+        - role
+        - team
+        - isDead
+        - isBot
+        - currentGold
+        - totalItemGold
+        - totalGold
+        - kills
+        - deaths
+        - assists
+        - enemyKills
+        - cs
+        - jungleCS
+        - wardScore
+        - level
+        - xpDiff
+        - q
+        - w
+        - e
+        - r
+        - attackDamage
+        - armor
+        - magicResist
+        - maxHealth
+        - teamKills
+        - teamGold
+        - teamLevel
+        - teamXPDiff
+        - runes
+        - objectives
+        - items
+        - gameTime
+
+    RuneAnalytics:
       type: object
+
       properties:
-        q:
+        keystone:
+          type: string
+
+        primary:
+          type: string
+
+        secondary:
+          type: string
+
+      required:
+        - keystone
+        - primary
+        - secondary
+
+    ObjectivesAnalytics:
+      type: object
+
+      properties:
+        turrets:
           type: integer
-        w:
+
+        inhibitors:
           type: integer
-        e:
+
+        dragons:
           type: integer
-        r:
+
+        barons:
           type: integer
+
+        heralds:
+          type: integer
+
+        voidgrubs:
+          type: integer
+
+      required:
+        - turrets
+        - inhibitors
+        - dragons
+        - barons
+        - heralds
+        - voidgrubs
 
     ItemAnalytics:
       type: object
+
       properties:
         name:
           type: string
+
         price:
           type: number
+          format: double
+
         slot:
           type: integer
 
+      required:
+        - name
+        - price
+        - slot
+
     EventAnalytics:
       type: object
+
       properties:
         type:
           type: string
+
         time:
           type: number
+          format: double
+
         killer:
           type: string
+
         victim:
           type: string
 
-    UpdateResponse:
-      type: object
-      properties:
-        status:
-          type: string
-          example: ok
-        receivedAt:
-          type: string
-          format: date-time
+      required:
+        - type
+        - time
+        - killer
+        - victim

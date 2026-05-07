@@ -8,26 +8,131 @@ func NewGameTracker() *GameTracker {
 	return &GameTracker{}
 }
 
+func calcItemGold(items []models.Item) float64 {
+
+	total := 0.0
+
+	for _, it := range items {
+		total += it.Price
+	}
+
+	return total
+}
+
+func stringContains(s string, sub string) bool {
+
+	for i := 0; i <= len(s)-len(sub); i++ {
+
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+
+	return false
+}
+
+func contains(s string, sub string) bool {
+
+	return len(s) >= len(sub) &&
+		(s == sub ||
+			len(s) > len(sub) &&
+				stringContains(s, sub))
+}
+
+func calculateObjectives(
+	data *models.GameDataResponse,
+	team string,
+) models.ObjectivesAnalytics {
+
+	obj := models.ObjectivesAnalytics{}
+
+	for _, e := range data.Events.Events {
+
+		switch e.EventName {
+
+		case "TurretKilled":
+
+			if team == "ORDER" &&
+				contains(e.KillerName, "T100") {
+
+				obj.Turrets++
+			}
+
+			if team == "CHAOS" &&
+				contains(e.KillerName, "T200") {
+
+				obj.Turrets++
+			}
+
+		case "InhibKilled":
+
+			if team == "ORDER" &&
+				contains(e.KillerName, "T100") {
+
+				obj.Inhibitors++
+			}
+
+			if team == "CHAOS" &&
+				contains(e.KillerName, "T200") {
+
+				obj.Inhibitors++
+			}
+
+		case "DragonKill":
+
+			if contains(e.KillerName, team) {
+				obj.Dragons++
+			}
+
+		case "BaronKill":
+
+			if contains(e.KillerName, team) {
+				obj.Barons++
+			}
+
+		case "HeraldKill":
+
+			if contains(e.KillerName, team) {
+				obj.Heralds++
+			}
+
+		case "VoidGrubKill":
+
+			if contains(e.KillerName, team) {
+				obj.Voidgrubs++
+			}
+		}
+	}
+
+	return obj
+}
+
 func buildPlayerAnalytics(
 	data *models.GameDataResponse,
 	p *models.Player,
+	opponent *models.Player,
+
 	teamKills int,
 	teamGold float64,
+	teamLevel int,
+
 	enemyKills int,
+	enemyLevel int,
+
 	isActive bool,
 ) models.PlayerAnalytics {
 
 	items := []models.ItemAnalytics{}
-	totalItemGold := 0.0
+
+	totalItemGold := calcItemGold(p.Items)
 
 	for _, it := range p.Items {
+
 		items = append(items, models.ItemAnalytics{
 			Name:  it.DisplayName,
 			Price: it.Price,
 			Slot:  it.Slot,
 		})
-
-		totalItemGold += it.Price
 	}
 
 	currentGold := 0.0
@@ -43,6 +148,14 @@ func buildPlayerAnalytics(
 	if p.Position == "JUNGLE" {
 		jungleCS = int(float64(p.Scores.CreepScore) * 0.7)
 	}
+
+	xpDiff := 0
+
+	if opponent != nil {
+		xpDiff = p.Level - opponent.Level
+	}
+
+	objectives := calculateObjectives(data, p.Team)
 
 	playerData := models.PlayerAnalytics{
 		SummonerName: p.SummonerName,
@@ -71,15 +184,27 @@ func buildPlayerAnalytics(
 
 		Level: p.Level,
 
+		XPDiff: xpDiff,
+
 		TeamKills: teamKills,
 		TeamGold:  teamGold,
+		TeamLevel: teamLevel,
+
+		TeamXPDiff: teamLevel - enemyLevel,
+
+		Runes: models.RuneAnalytics{
+			Keystone:  p.Runes.Keystone.DisplayName,
+			Primary:   p.Runes.PrimaryRuneTree.DisplayName,
+			Secondary: p.Runes.SecondaryRuneTree.DisplayName,
+		},
+
+		Objectives: objectives,
 
 		Items: items,
 
 		GameTime: data.GameData.GameTime,
 	}
 
-	// Только для active player доступны championStats/abilities
 	if isActive {
 
 		playerData.Q = data.ActivePlayer.Abilities.Q.AbilityLevel
@@ -105,6 +230,7 @@ func (g *GameTracker) GetPlayerAnalytics(
 	for i := range data.AllPlayers {
 
 		if data.AllPlayers[i].SummonerName == data.ActivePlayer.SummonerName {
+
 			player = &data.AllPlayers[i]
 			break
 		}
@@ -130,27 +256,25 @@ func (g *GameTracker) GetPlayerAnalytics(
 
 	playerTeamKills := 0
 	playerTeamGold := 0.0
+	playerTeamLevel := 0
 
 	enemyTeamKills := 0
-	enemyTeamGold := 0.0
+	enemyTeamLevel := 0
 
 	for _, p := range data.AllPlayers {
 
-		total := 0.0
-
-		for _, it := range p.Items {
-			total += it.Price
-		}
+		total := calcItemGold(p.Items)
 
 		if p.Team == player.Team {
 
 			playerTeamKills += p.Scores.Kills
 			playerTeamGold += total
+			playerTeamLevel += p.Level
 
 		} else {
 
 			enemyTeamKills += p.Scores.Kills
-			enemyTeamGold += total
+			enemyTeamLevel += p.Level
 		}
 	}
 
@@ -169,9 +293,15 @@ func (g *GameTracker) GetPlayerAnalytics(
 	me := buildPlayerAnalytics(
 		data,
 		player,
+		opponent,
+
 		playerTeamKills,
 		playerTeamGold,
+		playerTeamLevel,
+
 		enemyTeamKills,
+		enemyTeamLevel,
+
 		true,
 	)
 
@@ -182,9 +312,15 @@ func (g *GameTracker) GetPlayerAnalytics(
 		enemy = buildPlayerAnalytics(
 			data,
 			opponent,
+			player,
+
 			enemyTeamKills,
-			enemyTeamGold,
+			calcItemGold(opponent.Items),
+			enemyTeamLevel,
+
 			playerTeamKills,
+			playerTeamLevel,
+
 			false,
 		)
 	}

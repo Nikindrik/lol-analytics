@@ -13,6 +13,19 @@ type ActivePlayer struct {
 
 	Abilities Abilities     `json:"abilities"`
 	Stats     ChampionStats `json:"championStats"`
+
+	FullRunes FullRunes `json:"fullRunes"`
+}
+
+type FullRunes struct {
+	Keystone          Rune `json:"keystone"`
+	PrimaryRuneTree   Rune `json:"primaryRuneTree"`
+	SecondaryRuneTree Rune `json:"secondaryRuneTree"`
+}
+
+type Rune struct {
+	DisplayName string `json:"displayName"`
+	ID          int    `json:"id"`
 }
 
 type Abilities struct {
@@ -46,6 +59,14 @@ type Player struct {
 
 	IsDead bool `json:"isDead"`
 	IsBot  bool `json:"isBot"`
+
+	Runes PlayerRunes `json:"runes"`
+}
+
+type PlayerRunes struct {
+	Keystone          Rune `json:"keystone"`
+	PrimaryRuneTree   Rune `json:"primaryRuneTree"`
+	SecondaryRuneTree Rune `json:"secondaryRuneTree"`
 }
 
 type Item struct {
@@ -77,6 +98,21 @@ type GameInfo struct {
 	GameTime float64 `json:"gameTime"`
 }
 
+type RuneAnalytics struct {
+	Keystone  string
+	Primary   string
+	Secondary string
+}
+
+type ObjectivesAnalytics struct {
+	Turrets    int
+	Inhibitors int
+	Dragons    int
+	Barons     int
+	Heralds    int
+	Voidgrubs  int
+}
+
 type PlayerAnalytics struct {
 	SummonerName string
 	Champion     string
@@ -104,6 +140,8 @@ type PlayerAnalytics struct {
 
 	Level int
 
+	XPDiff int
+
 	Q int
 	W int
 	E int
@@ -116,6 +154,13 @@ type PlayerAnalytics struct {
 
 	TeamKills int
 	TeamGold  float64
+	TeamLevel int
+
+	TeamXPDiff int
+
+	Runes RuneAnalytics
+
+	Objectives ObjectivesAnalytics
 
 	Items []ItemAnalytics
 
