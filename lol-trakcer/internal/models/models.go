@@ -43,6 +43,9 @@ type Player struct {
 	Position string `json:"position"`
 	Team     string `json:"team"`
 	RiotID   string `json:"riotId"`
+
+	IsDead bool `json:"isDead"`
+	IsBot  bool `json:"isBot"`
 }
 
 type Item struct {
@@ -82,6 +85,9 @@ type PlayerAnalytics struct {
 	Role   string
 	Team   string
 
+	IsDead bool
+	IsBot  bool
+
 	CurrentGold   float64
 	TotalItemGold float64
 	TotalGold     float64
@@ -89,6 +95,8 @@ type PlayerAnalytics struct {
 	Kills   int
 	Deaths  int
 	Assists int
+
+	EnemyKills int
 
 	CS        int
 	JungleCS  int
@@ -109,9 +117,8 @@ type PlayerAnalytics struct {
 	TeamKills int
 	TeamGold  float64
 
-	EnemyKills int
+	Items []ItemAnalytics
 
-	Items    []ItemAnalytics
 	GameTime float64
 }
 
@@ -126,12 +133,6 @@ type EventAnalytics struct {
 	Time   float64
 	Killer string
 	Victim string
-}
-
-type TeamAnalytics struct {
-	Team      string
-	TeamKills int
-	TeamGold  float64
 }
 
 type ServerPayload struct {
