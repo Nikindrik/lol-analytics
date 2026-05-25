@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>LoL Live Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans p-6">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
+            <h1 class="text-3xl font-bold text-blue-400">League of Legends - Live Match</h1>
+            <div id="gameTime" class="text-xl font-mono bg-gray-800 px-4 py-2 rounded">Время: 00:00</div>
+        </header>
+
+        <!-- Плашки с информацией -->
+        <div class="grid grid-cols-2 gap-6 mb-8">
+            <!-- Игрок -->
+            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border-l-4 border-blue-500">
+                <h2 class="text-2xl font-bold mb-2" id="playerChamp">Игрок</h2>
+                <p class="text-gray-400" id="playerName">Имя</p>
+                <div class="mt-4 flex justify-between text-lg">
+                    <div>KDA: <span id="playerKDA" class="font-bold text-green-400">0/0/0</span></div>
+                    <div>CS: <span id="playerCS" class="font-bold text-yellow-400">0</span></div>
+                    <div>Золото: <span id="playerGold" class="font-bold text-yellow-500">0</span></div>
+                </div>
+            </div>
+
+            <!-- Противник -->
+            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border-l-4 border-red-500">
+                <h2 class="text-2xl font-bold mb-2" id="oppChamp">Противник</h2>
+                <p class="text-gray-400" id="oppName">Имя</p>
+                <div class="mt-4 flex justify-between text-lg">
+                    <div>KDA: <span id="oppKDA" class="font-bold text-green-400">0/0/0</span></div>
+                    <div>CS: <span id="oppCS" class="font-bold text-yellow-400">0</span></div>
+                    <div>Золото: <span id="oppGold" class="font-bold text-yellow-500">0</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Графики -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+            <h3 class="text-xl font-bold mb-4">Золото в реальном времени</h3>
+            <canvas id="goldChart" height="100"></canvas>
+        </div>
+        
+        <!-- События -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h3 class="text-xl font-bold mb-4">Последние события</h3>
+            <ul id="eventsList" class="space-y-2 h-48 overflow-y-auto font-mono text-sm">
+                <li class="text-gray-500">Ожидание событий...</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Настройка графика
+        const ctx = document.getElementById('goldChart').getContext('2d');
+        const goldChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Время игры
+                datasets: [
+                    { label: 'Наше Золото', borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', data: [], fill: true, tension: 0.3 },
+                    { label: 'Золото противника', borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', data: [], fill: true, tension: 0.3 }
+                ]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: false } }, animation: { duration: 0 } }
+        });
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // Подключение по WebSocket
+        const ws = new WebSocket("ws://" + window.location.host + "/ws");
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            // Обновление времени
+            document.getElementById('gameTime').innerText = `Время: ${formatTime(data.Player.GameTime)}`;
+
+            // Обновление Игрока
+            document.getElementById('playerChamp').innerText = data.Player.Champion;
+            document.getElementById('playerName').innerText = data.Player.SummonerName;
+            document.getElementById('playerKDA').innerText = `${data.Player.Kills}/${data.Player.Deaths}/${data.Player.Assists}`;
+            document.getElementById('playerCS').innerText = data.Player.CS;
+            document.getElementById('playerGold').innerText = Math.round(data.Player.TotalGold);
+
+            // Обновление Противника
+            document.getElementById('oppChamp').innerText = data.Opponent.Champion;
+            document.getElementById('oppName').innerText = data.Opponent.SummonerName;
+            document.getElementById('oppKDA').innerText = `${data.Opponent.Kills}/${data.Opponent.Deaths}/${data.Opponent.Assists}`;
+            document.getElementById('oppCS').innerText = data.Opponent.CS;
+            document.getElementById('oppGold').innerText = Math.round(data.Opponent.TotalGold);
+
+            // Обновление графика (Добавляем точку)
+            const timeStr = formatTime(data.Player.GameTime);
+            // Чтобы график не бесконечно рос в ширину, сохраняем последние 30 точек
+            if (goldChart.data.labels.length > 30) {
+                goldChart.data.labels.shift();
+                goldChart.data.datasets[0].data.shift();
+                goldChart.data.datasets[1].data.shift();
+            }
+            // Проверка, чтобы не дублировать одно и то же время
+            if (goldChart.data.labels[goldChart.data.labels.length - 1] !== timeStr) {
+                goldChart.data.labels.push(timeStr);
+                goldChart.data.datasets[0].data.push(data.Player.TotalGold);
+                goldChart.data.datasets[1].data.push(data.Opponent.TotalGold);
+                goldChart.update();
+            }
+
+            // Обновление лога событий (показываем 10 последних)
+            if (data.Events && data.Events.length > 0) {
+                const eventsHtml = [...data.Events].reverse().slice(0, 10).map(e => {
+                    let text = `[${formatTime(e.Time)}] ${e.Type}`;
+                    if (e.Killer) text += `: ${e.Killer}`;
+                    if (e.Victim) text += ` убил ${e.Victim}`;
+                    let color = e.Type === 'ChampionKill' ? 'text-red-400' : 'text-blue-300';
+                    return `<li class="${color}">${text}</li>`;
+                }).join('');
+                document.getElementById('eventsList').innerHTML = eventsHtml;
+            }
+        };
+
+        ws.onclose = function() { console.log("Соединение закрыто"); };
+    </script>
+</body>
+</html>
