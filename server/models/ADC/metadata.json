@@ -1,0 +1,14 @@
+{
+    "role": "ADC",
+    "classes": [
+        "ADC_0",
+        "ADC_1",
+        "ADC_2"
+    ],
+    "features_count": 11,
+    "models": [
+        "catboost",
+        "xgboost",
+        "lightgbm"
+    ]
+}

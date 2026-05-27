@@ -1,0 +1,18 @@
+{
+    "role": "Support",
+    "classes": [
+        "Support_0",
+        "Support_1",
+        "Support_2",
+        "Support_3",
+        "Support_4",
+        "Support_5",
+        "Support_6"
+    ],
+    "features_count": 11,
+    "models": [
+        "catboost",
+        "xgboost",
+        "lightgbm"
+    ]
+}
