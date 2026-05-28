@@ -9,10 +9,5 @@
         "Support_5",
         "Support_6"
     ],
-    "features_count": 11,
-    "models": [
-        "catboost",
-        "xgboost",
-        "lightgbm"
-    ]
+    "features_count": 11
 }

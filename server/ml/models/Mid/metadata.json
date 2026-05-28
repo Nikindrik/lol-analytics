@@ -4,10 +4,5 @@
         "Mid_0",
         "Mid_1"
     ],
-    "features_count": 11,
-    "models": [
-        "catboost",
-        "xgboost",
-        "lightgbm"
-    ]
+    "features_count": 11
 }

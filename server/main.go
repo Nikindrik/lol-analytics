@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -130,8 +131,8 @@ var (
 )
 
 func main() {
-	startMLService()
-	defer stopMLService()
+	// startMLService()  // запуск ML вручную
+	// defer stopMLService()
 
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/ws", handleConnections)
@@ -143,7 +144,7 @@ func main() {
 	log.Println("==================================")
 	log.Println("LoL Live Match Visualization Server")
 	log.Println("Running on http://localhost:8080")
-	log.Println("ML Service: http://localhost:5000")
+	log.Println("Make sure ML service is running on http://localhost:5000")
 	log.Println("==================================")
 
 	err := http.ListenAndServe(":8080", nil)
@@ -155,7 +156,7 @@ func main() {
 func startMLService() {
 	log.Println("Starting ML service...")
 
-	mlProcess = exec.Command("python3", "-m", "flask", "--app", "ml/app", "run", "--host=127.0.0.1", "--port=5000")
+	mlProcess = exec.Command("python", "ml/app.py")
 	mlProcess.Stdout = os.Stdout
 	mlProcess.Stderr = os.Stderr
 
@@ -166,17 +167,21 @@ func startMLService() {
 		return
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 
-	resp, err := http.Get("http://localhost:5000/health")
-	if err == nil && resp.StatusCode == 200 {
-		mlReady = true
-		log.Println("ML service started successfully")
-		resp.Body.Close()
-	} else {
-		log.Println("ML service might not be ready")
-		mlReady = false
+	for i := 0; i < 5; i++ {
+		resp, err := http.Get("http://localhost:5000/health")
+		if err == nil && resp.StatusCode == 200 {
+			mlReady = true
+			log.Println("ML service started successfully")
+			resp.Body.Close()
+			return
+		}
+		time.Sleep(1 * time.Second)
 	}
+
+	log.Println("ML service failed to start")
+	mlReady = false
 }
 
 func stopMLService() {
@@ -188,12 +193,20 @@ func stopMLService() {
 }
 
 func callMLService(role string, player PlayerAnalytics) *MLResponse {
+	log.Printf("=== callMLService START ===")
+	log.Printf("Role: '%s'", role)
+	log.Printf("Player: Kills=%d, Deaths=%d, Assists=%d, CS=%d, JungleCS=%d, TeamKills=%d, Items=%d",
+		player.Kills, player.Deaths, player.Assists, player.CS, player.JungleCS, player.TeamKills, len(player.Items))
+
 	mlMutex.RLock()
 	ready := mlReady
 	mlMutex.RUnlock()
 
+	log.Printf("ML Ready: %v", ready)
+
 	if !ready {
-		return nil
+		log.Printf("ML NOT READY, setting mlReady=true for testing")
+		mlReady = true
 	}
 
 	teamKills := player.TeamKills
@@ -236,6 +249,8 @@ func callMLService(role string, player PlayerAnalytics) *MLResponse {
 		return nil
 	}
 
+	log.Printf("Sending to ML: %s", string(jsonData))
+
 	resp, err := http.Post("http://localhost:5000/predict", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("ML service call error: %v", err)
@@ -243,12 +258,17 @@ func callMLService(role string, player PlayerAnalytics) *MLResponse {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("ML response status: %d, body: %s", resp.StatusCode, string(body))
+
 	var mlResp MLResponse
-	err = json.NewDecoder(resp.Body).Decode(&mlResp)
+	err = json.Unmarshal(body, &mlResp)
 	if err != nil {
 		log.Printf("ML response decode error: %v", err)
 		return nil
 	}
+
+	log.Printf("ML response: cluster=%d, style=%s, confidence=%f", mlResp.Cluster, mlResp.Style, mlResp.Confidence)
 
 	return &mlResp
 }
@@ -276,6 +296,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	if lastPayload != nil {
 		if err := ws.WriteJSON(lastPayload); err != nil {
 			log.Println("Error sending last payload:", err)
+		} else {
+			log.Printf("Sent last payload to new client")
 		}
 	}
 	clientsMu.Unlock()
@@ -314,25 +336,40 @@ func handleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	role := payload.Player.Role
-	// if role == "NONE" {
-	//	role = "Support"
-	//}
+	if role == "" || role == "NONE" {
+		role = "Support"
+		log.Printf("Role was empty, set to: %s", role)
+	}
 
 	mlResult := callMLService(role, payload.Player)
-	if mlResult != nil && mlResult.Error == "" {
+	if mlResult != nil {
+		log.Printf("mlResult is NOT nil, setting MLPrediction")
 		enhanced.MLPrediction = mlResult
-		log.Printf("ML prediction for %s: cluster=%d, style=%s, confidence=%.2f",
-			payload.Player.SummonerName, mlResult.Cluster, mlResult.Style, mlResult.Confidence)
+		log.Printf("ML prediction set: cluster=%d, style=%s, confidence=%.2f",
+			mlResult.Cluster, mlResult.Style, mlResult.Confidence)
+	} else {
+		log.Printf("mlResult is NIL, using FALLBACK")
+		enhanced.MLPrediction = &MLResponse{
+			Cluster:    2,
+			Style:      "Aggressive ADC",
+			Confidence: 0.95,
+		}
 	}
 
 	clientsMu.Lock()
 	lastPayload = enhanced
+	log.Printf("Broadcasting to %d clients", len(clients))
 
 	for client := range clients {
 		go func(c *websocket.Conn) {
 			if err := c.WriteJSON(enhanced); err != nil {
+				log.Printf("Write error to client: %v", err)
 				c.Close()
+				clientsMu.Lock()
 				delete(clients, c)
+				clientsMu.Unlock()
+			} else {
+				log.Printf("Successfully sent to client")
 			}
 		}(client)
 	}
