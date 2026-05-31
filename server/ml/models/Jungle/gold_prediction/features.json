@@ -1,0 +1,11 @@
+[
+    "kills",
+    "deaths",
+    "assists",
+    "items_count",
+    "cs",
+    "jungle_cs",
+    "xp",
+    "jungle_ratio",
+    "kill_participation"
+]
