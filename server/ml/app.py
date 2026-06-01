@@ -30,16 +30,6 @@ def predict():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({
-        'status': 'ok',
-        'models': list(service.models.keys())
-    })
-
-if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=False)
-    
 @app.route('/predict_full', methods=['POST'])
 def predict_full():
     try:
@@ -67,6 +57,7 @@ def predict_full():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 @app.route('/predict_regression', methods=['POST'])
 def predict_regression():
     try:
@@ -99,6 +90,14 @@ def predict_regression():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        'status': 'ok',
+        'models': list(service.models.keys()),
+        'regression_models': list(service.regression_models.keys())
+    })
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=False)

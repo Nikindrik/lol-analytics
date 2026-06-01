@@ -1,10 +1,8 @@
-# lol-analytics/server/ml/regression_model_loader.py
 import json
 import catboost
 import joblib
 import lightgbm as lgb
 import xgboost as xgb
-import numpy as np
 from pathlib import Path
 
 class RegressionModelLoader:
