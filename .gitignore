@@ -30,3 +30,35 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# models
+# Игнорировать модели CatBoost
+server/ml/models/*.cbm
+server/ml/models/*.catboost
+server/ml/models/catboost_*
+
+# Игнорировать модели XGBoost
+server/ml/models/*.ubj
+server/ml/models/*.model
+server/ml/models/xgboost_*
+*.xgb
+
+# Игнорировать модели LightGBM
+server/ml/models/*.lgb
+server/ml/models/*.lightgbm
+server/ml/models/lightgbm_*
+
+# Игнорировать все бинарные файлы моделей в этой директории
+server/ml/models/*.bin
+server/ml/models/*.pkl
+server/ml/models/*.joblib
+
+# Игнорировать поддиректории с моделями (например, для разных ролей)
+server/ml/models/*/model*
+server/ml/models/*/*.cbm
+server/ml/models/*/*.ubj
+server/ml/models/*/*.lgb
+
+# Сохранить файл .gitkeep для структуры папок
+!server/ml/models/.gitkeep
+!server/ml/models/*/.gitkeep

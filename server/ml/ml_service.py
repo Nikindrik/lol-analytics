@@ -13,7 +13,7 @@ class MLService:
                 self.models[role_dir.name] = EnsembleModel(role_dir)
                 print(f"Loaded model for {role_dir.name}")
                 if self._has_regression_files(role_dir):
-                    self.regression_models[role_dir.name] = RegressionEnsemble(role_dir)
+                    self.regression_models[role_dir.name] = RegressionEnsemble(role_dir / 'gold_prediction')
                     print(f"Loaded regression model for {role_dir.name}")
 
     def predict(self, role, data):
