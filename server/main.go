@@ -7,10 +7,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"os/exec"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -124,14 +122,14 @@ type GoldPrediction struct {
 }
 
 type FullMLResponse struct {
-	Playstyle      *MLResponse      `json:"playstyle"`
-	GoldPrediction *GoldPrediction  `json:"gold_prediction,omitempty"`
+	Playstyle      *MLResponse     `json:"playstyle"`
+	GoldPrediction *GoldPrediction `json:"gold_prediction,omitempty"`
 }
 
 type EnhancedPayload struct {
 	ServerPayload
-	MLPrediction   *MLResponse      `json:"mlPrediction,omitempty"`
-	GoldPrediction *GoldPrediction  `json:"goldPrediction,omitempty"`
+	MLPrediction   *MLResponse     `json:"mlPrediction,omitempty"`
+	GoldPrediction *GoldPrediction `json:"goldPrediction,omitempty"`
 }
 
 var (
@@ -329,8 +327,8 @@ func handleIngest(w http.ResponseWriter, r *http.Request) {
 		payload.Timestamp, payload.Player.SummonerName, payload.Player.Role)
 
 	enhanced := &EnhancedPayload{
-		ServerPayload: payload,
-		MLPrediction:  nil,
+		ServerPayload:  payload,
+		MLPrediction:   nil,
 		GoldPrediction: nil,
 	}
 
