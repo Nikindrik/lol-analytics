@@ -1,3 +1,4 @@
+<!-- lol-analytics/server/index.html -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -40,9 +41,26 @@
             box-shadow: 0 0 15px rgba(10, 159, 255, 0.3);
         }
         
+        .gold-prediction-card {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1));
+            border: 2px solid #ffd700;
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-top: 10px;
+            text-align: center;
+        }
+        
         .playstyle-label {
             font-size: 10px;
             color: #0a9fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+        
+        .gold-label {
+            font-size: 10px;
+            color: #ffd700;
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 5px;
@@ -55,6 +73,12 @@
             text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
         }
         
+        .gold-value {
+            font-size: 20px;
+            font-weight: 800;
+            color: #ffd700;
+        }
+        
         .playstyle-confidence {
             font-size: 10px;
             color: #888;
@@ -63,6 +87,16 @@
         
         .playstyle-confidence span {
             color: #00ff00;
+            font-weight: 700;
+        }
+        
+        .gold-diff-positive {
+            color: #00ff00;
+            font-weight: 700;
+        }
+        
+        .gold-diff-negative {
+            color: #ff4444;
             font-weight: 700;
         }
         
@@ -81,8 +115,17 @@
             100% { box-shadow: 0 0 20px rgba(0, 255, 204, 0.6); }
         }
         
+        @keyframes goldGlow {
+            0% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.3); }
+            100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6); }
+        }
+        
         .playstyle-card.new {
             animation: glow 0.5s ease-in-out;
+        }
+        
+        .gold-prediction-card.new {
+            animation: goldGlow 0.5s ease-in-out;
         }
     </style>
 </head>
@@ -121,6 +164,16 @@
                         <div class="playstyle-confidence" id="playstyleConfidence">confidence: <span>0%</span></div>
                     </div>
                 </div>
+                <div id="goldPredictionContainer">
+                    <div class="gold-prediction-card">
+                        <div class="gold-label">EXPECTED GOLD</div>
+                        <div class="gold-value" id="predictedGold">-</div>
+                        <div class="playstyle-confidence">
+                            Current: <span id="currentGold">0</span> | 
+                            Diff: <span id="goldDiff">0</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="card enemy">
@@ -155,16 +208,22 @@
             { id: 'cs', label: 'CS', metric: 'cs', color: ['#00BFFF', '#DC143C'] },
             { id: 'level', label: 'Level', metric: 'level', color: ['#00FF00', '#FF1493'] },
             { id: 'kills', label: 'Kills', metric: 'kills', color: ['#32CD32', '#FF4444'] },
-            { id: 'xpdiff', label: 'XP Diff', metric: 'xpDiff', color: ['#FFD700', '#FF6B35'] }
+            { id: 'xpdiff', label: 'XP Diff', metric: 'xpDiff', color: ['#FFD700', '#FF6B35'] },
+            { id: 'gold_comparison', label: 'Gold Comparison', metric: null, color: ['#FFD700', '#FFA500', '#00FF00'] }
         ];
 
         let charts = {};
         let data = {};
         let lastPlaystyle = '';
+        let goldHistory = { actual: [], predicted: [], labels: [] };
 
         function initCharts() {
             const container = document.getElementById('chartsContainer');
+            
+            // Создаем все графики кроме gold_comparison
             metrics.forEach(m => {
+                if (m.id === 'gold_comparison') return;
+                
                 const box = document.createElement('div');
                 box.className = 'chart-box';
                 box.innerHTML = `<h3>${m.label}</h3><canvas id="c-${m.id}"></canvas>`;
@@ -190,6 +249,31 @@
                         animation: { duration: 0 }
                     }
                 });
+            });
+            
+            // Создаем специальный график для сравнения золота
+            const goldBox = document.createElement('div');
+            goldBox.className = 'chart-box';
+            goldBox.innerHTML = `<h3>Gold: Actual vs Predicted</h3><canvas id="c-gold_comparison"></canvas>`;
+            container.appendChild(goldBox);
+            
+            const goldCtx = document.getElementById('c-gold_comparison').getContext('2d');
+            charts['gold_comparison'] = new Chart(goldCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Actual Gold', data: [], borderColor: '#FFD700', backgroundColor: '#FFD70020', borderWidth: 2, tension: 0.3, fill: false, pointRadius: 2 },
+                        { label: 'Predicted Gold', data: [], borderColor: '#00FF00', backgroundColor: '#00FF0020', borderWidth: 2, tension: 0.3, fill: false, pointRadius: 2, borderDash: [5, 5] }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: { legend: { display: true, labels: { color: '#0a9fff', font: { size: 9 } } } },
+                    scales: { y: { beginAtZero: true, grid: { color: 'rgba(10, 95, 150, 0.1)' }, ticks: { color: '#888', font: { size: 8 } } }, x: { grid: { color: 'rgba(10, 95, 150, 0.1)' }, ticks: { color: '#888', font: { size: 8 } } } },
+                    animation: { duration: 0 }
+                }
             });
         }
 
@@ -223,10 +307,52 @@
             styleValue.style.color = color;
             styleValue.style.textShadow = `0 0 10px ${color}80`;
         }
+        
+        function updateGoldDisplay(goldPrediction) {
+            if (!goldPrediction) return;
+            
+            const predictedElem = document.getElementById('predictedGold');
+            const currentElem = document.getElementById('currentGold');
+            const diffElem = document.getElementById('goldDiff');
+            const goldCard = document.querySelector('.gold-prediction-card');
+            
+            predictedElem.textContent = Math.round(goldPrediction.predicted_gold);
+            currentElem.textContent = Math.round(goldPrediction.current_gold);
+            
+            const diff = goldPrediction.gold_diff;
+            diffElem.textContent = (diff > 0 ? '+' : '') + Math.round(diff);
+            diffElem.className = diff >= 0 ? 'gold-diff-positive' : 'gold-diff-negative';
+            
+            goldCard.classList.remove('new');
+            void goldCard.offsetWidth;
+            goldCard.classList.add('new');
+        }
 
         function formatTime(s) {
             const m = Math.floor(s / 60);
             return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+        }
+        
+        function updateGoldComparisonChart(gameTime, actualGold, predictedGold) {
+            const timeLabel = formatTime(gameTime);
+            
+            goldHistory.labels.push(timeLabel);
+            goldHistory.actual.push(actualGold);
+            goldHistory.predicted.push(predictedGold);
+            
+            // Оставляем последние 60 точек
+            if (goldHistory.labels.length > 60) {
+                goldHistory.labels.shift();
+                goldHistory.actual.shift();
+                goldHistory.predicted.shift();
+            }
+            
+            if (charts['gold_comparison']) {
+                charts['gold_comparison'].data.labels = [...goldHistory.labels];
+                charts['gold_comparison'].data.datasets[0].data = [...goldHistory.actual];
+                charts['gold_comparison'].data.datasets[1].data = [...goldHistory.predicted];
+                charts['gold_comparison'].update('none');
+            }
         }
 
         function updateData(payload) {
@@ -248,8 +374,22 @@
             if (payload.mlPrediction) {
                 updatePlaystyleDisplay(payload.mlPrediction);
             }
+            
+            if (payload.goldPrediction) {
+                updateGoldDisplay(payload.goldPrediction);
+                
+                // Обновляем график сравнения золота
+                updateGoldComparisonChart(
+                    p.gameTime,
+                    payload.goldPrediction.current_gold,
+                    payload.goldPrediction.predicted_gold
+                );
+            }
 
+            // Обновляем обычные графики
             metrics.forEach(m => {
+                if (m.id === 'gold_comparison') return;
+                
                 const pVal = p[m.metric] || 0;
                 const oVal = o[m.metric] || 0;
                 
@@ -263,10 +403,12 @@
                     data[m.id].o.shift();
                 }
                 
-                charts[m.id].data.labels = [...data[m.id].labels];
-                charts[m.id].data.datasets[0].data = [...data[m.id].p];
-                charts[m.id].data.datasets[1].data = [...data[m.id].o];
-                charts[m.id].update('none');
+                if (charts[m.id]) {
+                    charts[m.id].data.labels = [...data[m.id].labels];
+                    charts[m.id].data.datasets[0].data = [...data[m.id].p];
+                    charts[m.id].data.datasets[1].data = [...data[m.id].o];
+                    charts[m.id].update('none');
+                }
             });
         }
 

@@ -1,3 +1,4 @@
+// lol-analytics/server/main.go
 package main
 
 import (
@@ -99,6 +100,9 @@ type MLFeatures struct {
 	TeamGoldDiff      int     `json:"team_gold_diff"`
 	JungleRatio       float64 `json:"jungle_ratio"`
 	KillParticipation float64 `json:"kill_participation"`
+	CurrentGold       float64 `json:"current_gold"`
+	TotalGold         float64 `json:"total_gold"`
+	GameTime          float64 `json:"game_time"`
 }
 
 type MLRequest struct {
@@ -113,9 +117,21 @@ type MLResponse struct {
 	Error      string  `json:"error,omitempty"`
 }
 
+type GoldPrediction struct {
+	PredictedGold float64 `json:"predicted_gold"`
+	CurrentGold   float64 `json:"current_gold"`
+	GoldDiff      float64 `json:"gold_diff"`
+}
+
+type FullMLResponse struct {
+	Playstyle      *MLResponse      `json:"playstyle"`
+	GoldPrediction *GoldPrediction  `json:"gold_prediction,omitempty"`
+}
+
 type EnhancedPayload struct {
 	ServerPayload
-	MLPrediction *MLResponse `json:"mlPrediction,omitempty"`
+	MLPrediction   *MLResponse      `json:"mlPrediction,omitempty"`
+	GoldPrediction *GoldPrediction  `json:"goldPrediction,omitempty"`
 }
 
 var (
@@ -131,9 +147,6 @@ var (
 )
 
 func main() {
-	// startMLService()  // запуск ML вручную
-	// defer stopMLService()
-
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/ws", handleConnections)
 	http.HandleFunc("/ingest", handleIngest)
@@ -153,62 +166,7 @@ func main() {
 	}
 }
 
-func startMLService() {
-	log.Println("Starting ML service...")
-
-	mlProcess = exec.Command("python", "ml/app.py")
-	mlProcess.Stdout = os.Stdout
-	mlProcess.Stderr = os.Stderr
-
-	err := mlProcess.Start()
-	if err != nil {
-		log.Printf("Warning: Could not start ML service: %v", err)
-		mlReady = false
-		return
-	}
-
-	time.Sleep(5 * time.Second)
-
-	for i := 0; i < 5; i++ {
-		resp, err := http.Get("http://localhost:5000/health")
-		if err == nil && resp.StatusCode == 200 {
-			mlReady = true
-			log.Println("ML service started successfully")
-			resp.Body.Close()
-			return
-		}
-		time.Sleep(1 * time.Second)
-	}
-
-	log.Println("ML service failed to start")
-	mlReady = false
-}
-
-func stopMLService() {
-	if mlProcess != nil && mlProcess.Process != nil {
-		log.Println("Stopping ML service...")
-		mlProcess.Process.Kill()
-		mlProcess.Wait()
-	}
-}
-
-func callMLService(role string, player PlayerAnalytics) *MLResponse {
-	log.Printf("=== callMLService START ===")
-	log.Printf("Role: '%s'", role)
-	log.Printf("Player: Kills=%d, Deaths=%d, Assists=%d, CS=%d, JungleCS=%d, TeamKills=%d, Items=%d",
-		player.Kills, player.Deaths, player.Assists, player.CS, player.JungleCS, player.TeamKills, len(player.Items))
-
-	mlMutex.RLock()
-	ready := mlReady
-	mlMutex.RUnlock()
-
-	log.Printf("ML Ready: %v", ready)
-
-	if !ready {
-		log.Printf("ML NOT READY, setting mlReady=true for testing")
-		mlReady = true
-	}
-
+func extractFeatures(player PlayerAnalytics) MLFeatures {
 	teamKills := player.TeamKills
 	if teamKills == 0 {
 		teamKills = 1
@@ -224,7 +182,7 @@ func callMLService(role string, player PlayerAnalytics) *MLResponse {
 		jungleRatio = float64(player.JungleCS) / float64(player.CS+player.JungleCS)
 	}
 
-	features := MLFeatures{
+	return MLFeatures{
 		Kills:             player.Kills,
 		Deaths:            player.Deaths,
 		Assists:           player.Assists,
@@ -236,7 +194,16 @@ func callMLService(role string, player PlayerAnalytics) *MLResponse {
 		TeamGoldDiff:      player.TeamXPDiff,
 		JungleRatio:       jungleRatio,
 		KillParticipation: killParticipation,
+		CurrentGold:       player.CurrentGold,
+		TotalGold:         player.TotalGold,
+		GameTime:          player.GameTime,
 	}
+}
+
+func callMLServiceFull(role string, player PlayerAnalytics) *FullMLResponse {
+	log.Printf("Calling ML service for role: %s", role)
+
+	features := extractFeatures(player)
 
 	reqBody := MLRequest{
 		Role:     role,
@@ -245,13 +212,14 @@ func callMLService(role string, player PlayerAnalytics) *MLResponse {
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		log.Printf("ML request marshal error: %v", err)
+		log.Printf("Marshal error: %v", err)
 		return nil
 	}
 
 	log.Printf("Sending to ML: %s", string(jsonData))
 
-	resp, err := http.Post("http://localhost:5000/predict", "application/json", bytes.NewBuffer(jsonData))
+	resp, err := http.Post("http://localhost:5000/predict_full",
+		"application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("ML service call error: %v", err)
 		return nil
@@ -259,18 +227,48 @@ func callMLService(role string, player PlayerAnalytics) *MLResponse {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	log.Printf("ML response status: %d, body: %s", resp.StatusCode, string(body))
+	log.Printf("ML response: %s", string(body))
 
-	var mlResp MLResponse
-	err = json.Unmarshal(body, &mlResp)
-	if err != nil {
-		log.Printf("ML response decode error: %v", err)
+	var result struct {
+		Playstyle struct {
+			Cluster    int     `json:"cluster"`
+			Style      string  `json:"style"`
+			Confidence float64 `json:"confidence"`
+		} `json:"playstyle"`
+		GoldPrediction struct {
+			PredictedGold float64 `json:"predicted_gold"`
+			CurrentGold   float64 `json:"current_gold"`
+			GoldDiff      float64 `json:"gold_diff"`
+		} `json:"gold_prediction"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		log.Printf("Decode error: %v", err)
 		return nil
 	}
 
-	log.Printf("ML response: cluster=%d, style=%s, confidence=%f", mlResp.Cluster, mlResp.Style, mlResp.Confidence)
+	fullResponse := &FullMLResponse{
+		Playstyle: &MLResponse{
+			Cluster:    result.Playstyle.Cluster,
+			Style:      result.Playstyle.Style,
+			Confidence: result.Playstyle.Confidence,
+		},
+	}
 
-	return &mlResp
+	// Добавляем предсказание золота если есть
+	if result.GoldPrediction.PredictedGold > 0 {
+		fullResponse.GoldPrediction = &GoldPrediction{
+			PredictedGold: result.GoldPrediction.PredictedGold,
+			CurrentGold:   result.GoldPrediction.CurrentGold,
+			GoldDiff:      result.GoldPrediction.GoldDiff,
+		}
+		log.Printf("Gold prediction: expected=%.0f, current=%.0f, diff=%.0f",
+			result.GoldPrediction.PredictedGold,
+			result.GoldPrediction.CurrentGold,
+			result.GoldPrediction.GoldDiff)
+	}
+
+	return fullResponse
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
@@ -333,6 +331,7 @@ func handleIngest(w http.ResponseWriter, r *http.Request) {
 	enhanced := &EnhancedPayload{
 		ServerPayload: payload,
 		MLPrediction:  nil,
+		GoldPrediction: nil,
 	}
 
 	role := payload.Player.Role
@@ -341,17 +340,16 @@ func handleIngest(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Role was empty, set to: %s", role)
 	}
 
-	mlResult := callMLService(role, payload.Player)
-	if mlResult != nil {
-		log.Printf("mlResult is NOT nil, setting MLPrediction")
-		enhanced.MLPrediction = mlResult
-		log.Printf("ML prediction set: cluster=%d, style=%s, confidence=%.2f",
-			mlResult.Cluster, mlResult.Style, mlResult.Confidence)
+	// Получаем полное предсказание (стиль + золото)
+	fullMLResult := callMLServiceFull(role, payload.Player)
+	if fullMLResult != nil {
+		enhanced.MLPrediction = fullMLResult.Playstyle
+		enhanced.GoldPrediction = fullMLResult.GoldPrediction
 	} else {
-		log.Printf("mlResult is NIL, using FALLBACK")
+		log.Printf("ML result is NIL, using fallback")
 		enhanced.MLPrediction = &MLResponse{
 			Cluster:    2,
-			Style:      "Aggressive ADC",
+			Style:      "Aggressive",
 			Confidence: 0.95,
 		}
 	}
